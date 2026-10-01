@@ -1,0 +1,41 @@
+name: 更新贡献日历数据
+
+on:
+  schedule:
+    # 每 6 小时一次（UTC 整点）。GitHub 的高峰时段可能延迟几分钟到半小时，属正常现象。
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 从 GitHub GraphQL 拉取贡献日历
+        env:
+          # 默认用 Actions 自带的 token；若它查不了 GraphQL，
+          # 就在仓库 Settings → Secrets 加一个 GITCAL_TOKEN（无 scope 的 classic PAT 即可）
+          GH_TOKEN: ${{ secrets.GITCAL_TOKEN || github.token }}
+          GH_USER: fomalhaut1998
+          OUT: data.json
+        run: python3 generate.py
+
+      - name: 有变化才提交
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [ -z "$(git status --porcelain data.json)" ]; then
+            echo "数据没有变化，跳过提交"
+            exit 0
+          fi
+          git add data.json
+          git commit -m "chore: 更新贡献日历数据 $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push
